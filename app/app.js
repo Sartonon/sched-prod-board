@@ -27,11 +27,40 @@ function makeRow(i) {
     <span class="what">${esc(i.service)} · ${esc(i.region)} · ${esc(i.summary)}</span>
     <time datetime="${esc(i.openedAt)}">${esc(fmt.format(new Date(i.openedAt)))}</time>
     <span class="act"><button type="button" data-testid="ack">Ack</button></span>`;
-  li.querySelector('[data-testid="ack"]').addEventListener('click', (e) => onAck(i.id, e.currentTarget));
+  li.querySelector('[data-testid="ack"]').addEventListener('click', (e) => askConfirm(i, e.currentTarget));
   return li;
 }
 
-async function onAck(id, button) {
+// Product's decision (step 2): Ack asks to confirm, and the confirm names the incident id.
+// The confirm is a fixed panel, so it holds still while new incidents arrive in the list behind it.
+const confirmBox = document.querySelector('[data-testid="confirm"]');
+const confirmText = confirmBox.querySelector('[data-role="confirm-text"]');
+const confirmAck = confirmBox.querySelector('[data-testid="confirm-ack"]');
+const confirmCancel = confirmBox.querySelector('[data-testid="confirm-cancel"]');
+let pending = null; // { incident, button }
+
+function askConfirm(incident, button) {
+  pending = { incident, button };
+  confirmText.textContent = `Ack ${incident.id}? ${incident.severity} · ${incident.service} · ${incident.region} · ${incident.summary}`;
+  confirmAck.textContent = `Ack ${incident.id}`;
+  confirmBox.hidden = false;
+  confirmAck.focus();
+}
+function closeConfirm() {
+  const p = pending;
+  pending = null;
+  confirmBox.hidden = true;
+  p?.button.isConnected && !p.button.disabled && p.button.focus();
+}
+confirmCancel.addEventListener('click', closeConfirm);
+confirmAck.addEventListener('click', () => {
+  const p = pending;
+  closeConfirm();
+  if (p) sendAck(p.incident.id, p.button);
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && pending) closeConfirm(); });
+
+async function sendAck(id, button) {
   button.disabled = true;
   button.textContent = 'Acking…';
   try {
